@@ -358,7 +358,7 @@ html{
 }
 
 .mainContainer{
-    width:320px;
+    width:100%px;
     display:none;
 }
 

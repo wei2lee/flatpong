@@ -93,7 +93,7 @@ function syncdata(ov, nv, onlyprops, m){
     }
 }
 
-function strValueOf(o){
+function strValueOf(obj){
     var s='{';
     var i=0;
     for(key in obj){

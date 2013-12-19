@@ -41,27 +41,17 @@
               <h1>Customize</h1>
 
               <h3 class='roomdata'></h3>
+              <h3 class='gamedata'></h3>
               <ul class='playersdata'></ul>
-
-              <ul class='pickColor'>
-                <li data='#ff0000' style='background-color:#ff0000;'>Color1</li>
-                <li data='#00ff00' style='background-color:#00ff00;'>Color2</li>
-                <li data='#0000ff' style='background-color:#0000ff;'>Color3</li>
-
-                <li data='#ff5555' style='background-color:#ff5555;'>Color4</li>
-                <li data='#55ff55' style='background-color:#55ff55;'>Color5</li>
-                <li data='#5555ff' style='background-color:#5555ff;'>Color6</li>
-
-                <li data='#ffaaaa' style='background-color:#ffaaaa;'>Color7</li>
-                <li data='#aaffaa' style='background-color:#aaffaa;'>Color8</li>
-                <li data='#aaaaff' style='background-color:#aaaaff;'>Color9</li>
-              </ul>
 
               <h3 class='ready'></h3>
 
             </div>
 
             <div class='content contgame'>
+              <h3 class='gamedata'></h3>
+              <ul class='playersdata'></ul>
+
               <input type='button' name='back' value='back'>
             </div>
 
@@ -93,28 +83,32 @@
             <div class='content contcustomize'>
               <h1>Customize</h1>
 
+              <h3 class='gamedata'></h3>
               <h3 class='playerdata'></h3>
 
               <div class='control'>
                 <div class='arrowbuttons'>
-                  <input type='button' name='up' value='up'>
-                  <input type='button' name='down' value='down'>
-                  <input type='button' name='left' value='left'>
-                  <input type='button' name='right' value='right'>
+                  <input type='button' name='up' value='up' data='up'>
+                  <input type='button' name='down' value='down' data='down'>
+                  <input type='button' name='left' value='left' data='left'>
+                  <input type='button' name='right' value='right' data='right'>
                 </div>
               </div>
-              <input type='button' name='confirm' value='confirm'>
-              <input type='button' name='start' value='start'>
+              <input type='button' name='confirm' value='confirm' id='confirm'>
+              <input type='button' name='start' value='start' id='start'>
               <h3 class='ready'></h3>
 
               <input type='button' name='back' value='back'>
             </div>
 
             <div class='content contgame'>
+              <h3 class='gamedata'></h3>
+              <h3 class='playerdata'></h3>
+
               <div class='control'>
                 <div class='arrowbuttons'>
-                  <input type='button' name='up' value='up'>
-                  <input type='button' name='down' value='down'>
+                  <input type='button' name='up' value='up' data='up'>
+                  <input type='button' name='down' value='down' data='down'>
                 </div>
                 <div class='gyroscope'></div>
               </div>

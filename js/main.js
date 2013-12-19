@@ -120,7 +120,7 @@ var App = function() {
                 $('.contcontroller .contcustomize .control [type=button]').off('vclick').on('vclick', function(){
                     if($(this).prop('disabled'))return;
 
-                    playerAction('control', {control:$(this).attr('data')});
+                    playerAction('control', $(this).attr('data'));
                 });
 
                 $('.contcontroller .contcustomize [name=confirm]').off('vclick').on('vclick', function(){
@@ -131,7 +131,7 @@ var App = function() {
                     modifyPlayer({confirmed:true});
                 });
 
-                $('.contcontroller .contcustomize control [name=start]').off('vclick').on('vclick', function(){
+                $('.contcontroller .contcustomize [name=start]').off('vclick').on('vclick', function(){
                     if($(this).prop('disabled'))return;
                     $(this).prop('disabled',true);
 
@@ -158,39 +158,38 @@ var App = function() {
         }
 
         this.updateContent=function(cont){
-            if(cont=='.contlanding'){
-                if(socketdata.player.role=='viewer'){
-                    $('.contviewer .contlanding .roomdata').html(sprintf('Room %s', socketdata.room.id));
-                }
-            }else if(cont=='.contcustomize'){
-                if(socketdata.player.role=='viewer'){
-                    $('.contviewer .contcustomize .roomdata').html(sprintf('Room %s', socketdata.room.id));
-                    jplayersdata=$('.contviewer .contcustomize ul.playersdata').empty();
-                    console.log(controllers(), socketdata.room.players);
 
-                    var ctrlrs=controllers();
-                    for(key in ctrlrs){
-                        //jli=$('<li></li>').html(sprintf('%s', JSON.stringify(ctrlrs[key])));
-                        jli=$('<li></li>').html(sprintf('%s%s,[%.0f]',player.name,player.isHost?'(Host)':'',player.gyrodata?player.gyrodata.y:0));
-                        jplayersdata.append(jli);
-                    }
-                }else{
-                    //$('.contcontroller .contcustomize .playerdata').html(sprintf('%s', JSON.stringify(socketdata.player)));
-                    player=socketdata.player;
-                    $('.contcontroller .contcustomize .playerdata').html(sprintf('%s%s,[%.0f]',player.name,player.isHost?'(Host)':'',player.gyrodata?player.gyrodata.y:0));
-                    var ctrlrs=controllers();
-                    var confirmcnt=0;
-                    for(key in ctrlrs)confirmcnt+=ctrlrs[key].confirmed?1:0;
-                    //alert(confirmcnt + ',' + ctrlrs.length + ',' + socketdata.player.isHost);
-                    if(confirmcnt==ctrlrs.length && socketdata.player.isHost)$('.contcontroller .contcustomize control [name=start]').show();
-                    else $('.contcontroller .contcustomize control [name=start]').hide();
+            $(cont+' .roomdata').html(sprintf('Room[%s] %s', socketdata.room.stat, socketdata.room.id));
+            $(cont+' .gamedata').html(sprintf('Game[%s]', socketdata.game.stat));
+
+            player=socketdata.player;
+            $(cont+' .playerdata').html(sprintf('%s,[y=%.0f]',strValueOf(player), player.gyrodata?player.gyrodata.y:0));
+
+            jplayersdata=$(cont+' ul.playersdata').empty();
+            var ctrlrs=controllers();
+            for(key in ctrlrs){
+                player=ctrlrs[key];
+                jli=$('<li></li>').html(sprintf('%s,[y=%.0f]',strValueOf(player), player.gyrodata?player.gyrodata.y:0));
+                jplayersdata.append(jli);
+            }
+
+            if(cont=='.contlanding'){
+            }else if(cont=='.contcustomize'){
+                if(socketdata.player.role=='controller'){
+                    if(socketdata.game.stat=='confirmed' || socketdata.game.stat=='ready')$('.contcontroller .contcustomize [name=start]').show();
+                    else $('.contcontroller .contcustomize [name=start]').hide();
                 }
+            }else if(cont=='.contgame'){
             }
         }
-        this.updateAppStatContent=function(){
-            this.updateContent('.cont'+this.stat);
+        this.updateAppStatContent=function(cont){
+            if(!cont)
+                this.updateContent('.cont'+this.stat);
+            else if(cont==this.stat)
+                this.updateContent('.cont'+this.stat);
         }
         this.playanim=function(s){
+            console.log('playanim@'+s);
             if(s=='gamereadyanim'){
                 cd=5;
                 setInterval(function(){
@@ -240,10 +239,11 @@ var App = function() {
 
             app.applyLowPassFilter(data, app.doSmoothed);
             socketdata.player.gyrodata=app.doSmoothed;
-            //app.updateAppStatContent();
+            
+            app.updateAppStatContent('customize');
 
             
-            if(socketdata.room.game.stat != 'started') return;
+            if(socketdata.game.stat != 'started') return;
             if(Date.now() - app.doUpdLastTime < app.doUpdTimeOut) return;
             app.doUpdLastTime = Date.now();
             modifyPlayer({gyrodata:app.doSmoothed});
@@ -288,7 +288,7 @@ var app = new App();
 var socket = io.connect('http://10.60.2.133:37001', {reconnect:false});
 var socketdata = {};
 socketdata.room = {};
-socketdata.room.game = {};
+socketdata.game = {};
 socketdata.player = {role:app.isMobile?'controller':'viewer'};
 //////////////////////////////
 socket.on('error', onServerError);
@@ -309,18 +309,18 @@ socket.on('onRoomModified', function(data){
 socket.on('onGameModified', function (data){ 
     var fireCallbacks = {
     "onGameModified"    : onGameModified,
-    "onGameReady"       : ((socketdata.room.game.stat!='ready'&&data.game.stat=='ready')     ? onGameReady   : null),
-    "onGameStarted"     : ((socketdata.room.game.stat!='started'&&data.game.stat=='started') ? onGameStarted : null),
-    "onGameEnded"       : ((socketdata.room.game.stat!='ended'&&data.game.stat=='ended')     ? onGameEnded   : null),
-    "onGameConfirmed"   : ((socketdata.room.game.stat!='confirmed'&&data.game.stat=='confirmed') ? onGameConfirm   : null),
+    "onGameReady"       : ((socketdata.game.stat!='ready'&&data.game.stat=='ready')     ? onGameReady   : null),
+    "onGameStarted"     : ((socketdata.game.stat!='started'&&data.game.stat=='started') ? onGameStarted : null),
+    "onGameEnded"       : ((socketdata.game.stat!='ended'&&data.game.stat=='ended')     ? onGameEnded   : null),
+    "onGameConfirmed"   : ((socketdata.game.stat!='confirmed'&&data.game.stat=='confirmed') ? onGameConfirmed   : null),
     };
-    syncdata(socketdata.room.game,data.game); 
+    syncdata(socketdata.game,data.game); 
     for(key in fireCallbacks) if(fireCallbacks[key]) try{ fireCallbacks[key](data.game); }catch(err) { console.log(key,err); }
 });
 
 socket.on('onViewerAction', function (data){
     try{
-        onViewerAction(data.action,data);
+        onViewerAction(data.action,data._data);
     }catch(err){
         console.log('onViewerAction',data.action,data);
     }
@@ -330,14 +330,12 @@ socket.on('onPlayerAction', function (data){
     var fireCallbacks = {
     "onPlayerAction"            : onPlayerAction
     };
-    joinind=joinIndexOf(data.player.id);
-    ind=indexOfPlayer(data.player.id);
-    delete data.id;
-    delete data.action;
-    for(key in fireCallbacks) if(fireCallbacks[key]) try{ fireCallbacks[key](data.action,data,joinind,ind); }catch(err) { console.log(key,err); }
+    joinind=joinIndexOf(data.id);
+    ind=indexOfPlayer(data.id);
+    for(key in fireCallbacks) if(fireCallbacks[key]) try{ fireCallbacks[key](data.action,data._data,joinind,ind); }catch(err) { console.log(key,err); }
 });
 
-socket.on('onAnyPlayerModified', function (data){
+socket.on('onPlayerModified', function (data){
     var fireCallbacks = {
     "onAnyPlayerModified"   : onAnyPlayerModified,
     "onMyPlayerModified"    : (data.player.id==socketdata.player.id ? onMyPlayerModified    : null),
@@ -361,6 +359,7 @@ socket.on('onPlayerJoined',function (data){
     //if(data.player.id==socketdata.player.id) syncdata(socketdata.room,data.room);
     //else socketdata.room.players.push(data.player);
     syncdata(socketdata.room,data.room);
+    syncdata(socketdata.game,data.game);
     syncplayer(data.player);
 
     joinind=joinIndexOf(data.player.id);
@@ -408,14 +407,16 @@ function modifyRoom(data){
 }
 function onRoomModified(data){
     console.log('onRoomModified@',data);
+     app.updateAppStatContent();
 }
 
 function modifyGame(data){
-    syncdata(socketdata.room.game,data);
+    syncdata(socketdata.game,data);
     socket.emit('modifyGame',{game:data});    
 }
 function onGameModified(data){
     console.log('onGameModified@',data);
+    app.updateAppStatContent();
 }
 function onGameConfirmed(){
     console.log('onGameConfirmed@');
@@ -423,6 +424,17 @@ function onGameConfirmed(){
 function onGameReady(){
     console.log('onGameReady@');
     app.playanim('gamereadyanim');
+
+    //
+    var ctrlrs=controllers();
+    socketdata.game.players=[
+        ctrlrs.length>0?ctrlrs[0]:null,
+        ctrlrs.length>1?ctrlrs[1]:null,
+        ctrlrs.length>2?ctrlrs[2]:null,
+        ctrlrs.length>3?ctrlrs[3]:null,
+    ];
+    socketdata.game.team1score=0;
+    socketdata.game.team2score=0;
 }
 function onGameStarted(){
     console.log('onGameStarted@');
@@ -435,11 +447,8 @@ function onGameEnded(){
 
 //viewr action will send to all controllers
 function viewerAction(action,data){
-    if(!data)data={};
-    data.id=socketdata.player.id;
-    data.action=action;
-    if(socketdata.player.role=='viewer')socket.emit('viewerAction', data);
-    else if(socketdata.player.role=='controller')socket.emit('playerAction', data);
+    if(socketdata.player.role=='viewer')socket.emit('viewerAction', {action:action, id:socketdta.id, _data:data});
+    else if(socketdata.player.role=='controller')socket.emit('playerAction', {action:action, id:socketdta.id, _data:data});
 }
 function onViewerAction(action,data){
     console.log('onViewerAction@',action,data);
@@ -450,25 +459,25 @@ function viewrActionBack(){
 function modifyPlayer(player){
     if(!player.id)player.id=socketdata.player.id;
     syncplayer(player);
-    socket.emit('modifyPlayer@',{player:player});
+    socket.emit('modifyPlayer',{player:player});
+    app.updateAppStatContent();
 }
 function onAnyPlayerModified(player,joinind,ind){
-    console.log('onAnyPlayerModified@',player,joinind,ind);
+    //console.log('onAnyPlayerModified@',player,joinind,ind);
+    app.updateAppStatContent();
 }
 function onMyPlayerModified(player,joinind,ind){
-    console.log('onMyPlayerModified@',player,joinind,ind);
+    //console.log('onMyPlayerModified@',player,joinind,ind);
 }
 function onOtherPlayerModified(player,joinind,ind){
-    console.log('onOtherPlayerModified@',player,joinind,ind);
+    //console.log('onOtherPlayerModified@',player,joinind,ind);
 }
 
 //player action will only send to viewer
 function playerAction(action,data){
-    if(!data)data={};
-    data.id=socketdata.player.id;
-    data.action=action;
-    if(socketdata.player.role=='viewer')socket.emit('viewerAction', data);
-    else if(socketdata.player.role=='controller')socket.emit('playerAction', data);
+    console.log('playerAction',action,data);
+    if(socketdata.player.role=='viewer')socket.emit('viewerAction', {action:action, id:socketdata.player.id, _data:data});
+    else if(socketdata.player.role=='controller')socket.emit('playerAction', {action:action, id:socketdata.player.id, _data:data});
 }
 function playerActionJoin(id){
     playerAction('join', {player:{role:socketdata.player.role}, room:{id:id}})
@@ -479,6 +488,7 @@ function onPlayerAction(action,data,joinind,ind){
 }
 function onAnyPlayerJoined(player,joinind,ind){
     console.log('onAnyPlayerJoined@',player.name,joinind,ind);
+    app.updateAppStatContent();
 }
 function onOtherPlayerJoined(player,joinind,ind){
     console.log('onOtherPlayerJoined@',player.name,joinind,ind);
@@ -502,20 +512,13 @@ function onMyPlayerJoined(player,joinind,ind){
 }
 function onOtherPlayerLeave(player,joinind,ind){
     console.log('onOtherPlayerLeave@',player.name,joinind,ind);
-    if(socketdata.player.role=='viewer'){
-        if(app.stat=='customize'||app.stat=='result'){
-            if(controllers().length==0){
-                /*
-                TweenMax.delayedCall(5, function(){
-                    app.setStat('landing');
-                    socketdata.room.id=null;
-                    playerActionJoin();
-                });//*/
-            }
+    //
+    for(key in socketdata.game.playerids){
+        if(socketdata.game.players[key].id==player.id){
+            socketdata.game.players[key]=null;
         }
     }
-    app.updateAppStatContent();
-    app.notify('player leaved:'+data.name);
+    app.notify('player leaved:'+player.name);
 }
 
 app.setStat('init');

@@ -12,8 +12,8 @@ var Config = function(){
 //player
 this.expireTimeoutDuration = 1000 * 15 * 60;
 this.idleTimeoutDuration = 1000 * 5 * 60;
-this.toall_playeronlyprops = ['name', 'avatarId', 'color', 'life', 'score'];
-this.toviewer_playeronlyprops = ['gyrodata'];
+//this.toall_playeronlyprops = ['name', 'avatarId', 'color', 'life', 'score','confirmed'];
+this.tovieweronlyprops = ['gyrodata','controldata'];
 
 //game
 this.gameonlyprops = ['stat'];
@@ -24,9 +24,9 @@ this.minController = 1;
 this.maxController = 4;
 this.confirmedGameStartWait = 5000; //ms
 
-this.def_socketdata_room_game = {id:null, stat:'init', startTime:null, endTime:null, team1score:0, team2score:0};
-this.def_socketdata_room = {id:null, stat:'init', disconnectWithoutNotify:false, players:[], game:this.def_socketdata_room_game};
-this.def_socketdata_player = {id:null, startTime:null, role:null, name:null, color:'#ff5555', avatarId:0, life:null, score:null, isHost:null, confirmed:false, gyrodata:null};
+this.def_socketdata_game = {id:null, stat:'init', startTime:null, endTime:null};
+this.def_socketdata_room = {id:null, stat:'init', disconnectWithoutNotify:false, players:[]};
+this.def_socketdata_player = {id:null, startTime:null, role:null, gameplayerind:-1, name:null, color:'#ff5555', avatarId:0, life:null, score:null, isHost:null, confirmed:false, gyrodata:null};
 
 
 };
@@ -54,15 +54,28 @@ io.sockets.on('connection', function (socket) {
     function diffdata(ov, nv, onlyprops, m) {
         var diff = null;
         for(prop in nv) {
-            if(onlyprops) {
-                if(onlyprops.indexOf(prop)<0) continue;
-                if(prop == 'id') continue;
-                if(!diff) diff = {};
-                diff[prop] = nv[prop];
-            }else {
-                if(prop == 'id') continue;
-                if(!diff) diff = {};
-                diff[prop] = nv[prop];
+            if(m=='include' || !m){
+                if(onlyprops) {
+                    if(onlyprops.indexOf(prop)<0) continue;
+                    if(prop == 'id') continue;
+                    if(!diff) diff = {};
+                    diff[prop] = nv[prop];
+                }else {
+                    if(prop == 'id') continue;
+                    if(!diff) diff = {};
+                    diff[prop] = nv[prop];
+                }
+            }else if(m=='exclude'){
+                if(onlyprops) {
+                    if(onlyprops.indexOf(prop)>=0) continue;
+                    if(prop == 'id') continue;
+                    if(!diff) diff = {};
+                    diff[prop] = nv[prop];
+                }else {
+                    if(prop == 'id') continue;
+                    if(!diff) diff = {};
+                    diff[prop] = nv[prop];
+                }
             }
         }
         return diff;
@@ -93,8 +106,7 @@ io.sockets.on('connection', function (socket) {
     //room.stat=[init, started, ended]
     //room.game.stat=[init, confirmed, ready, started, ended];
     socket.data.room = clone(cfg.def_socketdata_room);
-
-    //socket.data.player.role=[controller, viewer]
+    socket.data.game = clone(cfg.def_socketdata_game);
     socket.data.player = clone(cfg.def_socketdata_player);
 
     function clone(obj){
@@ -128,7 +140,15 @@ io.sockets.on('connection', function (socket) {
         }
         return null;
     }
-
+    function controllers(){
+        var ret = [];
+        for(key in socket.data.room.players){
+            if(socket.data.room.players[key].role=='controller'){
+                ret.push(socket.data.room.players[key]);
+            }
+        }
+        return ret;
+    }
     function syncplayer(player, onlyprops){
         if(player.id==socket.data.player.id){
             syncdata(socket.data.player,player,onlyprops);
@@ -167,15 +187,6 @@ io.sockets.on('connection', function (socket) {
         var ind = indexOfPlayer(id);
         if(ind>=0) socket.data.room.players.splice(ind, 1);
     }
-    function controllers(){
-        var ret = [];
-        for(key in socket.data.room.players){
-            if(socket.data.room.players[key].role=='controller'){
-                ret.push(socket.data.room.players[key]);
-            }
-        }
-        return ret;
-    }
 
    
     socket.data.player=clone(cfg.def_socketdata_player);
@@ -187,12 +198,14 @@ io.sockets.on('connection', function (socket) {
 
     socket.on('playerAction', function (data){
         var n = 'playerAction';
-        console.log(n,data);
+        //console.log('playerAction',data);
         var rmid, rcid, rcids, rcskt, rcsktid;
-        var rm;
+        var rm, gm;
         try{
             var action = data.action;
             if(action == 'join') {
+                data=data._data;
+
                 if(!data.player || !data.player.role || (data.player.role != 'controller' && data.player.role != 'viewer')) { throw 'invalid data.player'; }
                 if(!data.room) { throw 'invalid data.room'; }
 
@@ -214,12 +227,12 @@ io.sockets.on('connection', function (socket) {
                     }//*/
 
                     socket.data.player.role = 'viewer';
+                    socket.data.game=clone(cfg.def_socketdata_game);
                     socket.data.room=clone(cfg.def_socketdata_room);
                     socket.data.room.id = roomPool.shift();
                     socket.data.room.players=[socket.data.player];
-                    rm = socket.data.room;
                     socket.join(socket.data.room.id);
-                    socket.emit('onPlayerJoined', {room:rm, player:socket.data.player});
+                    socket.emit('onPlayerJoined', {room:socket.data.room, player:socket.data.player, game:socket.data.game});
                 }else if(data.player.role == 'controller') {
 
                     if(!data.room.id) throw 'room.id is emtpy';
@@ -232,9 +245,14 @@ io.sockets.on('connection', function (socket) {
                     for(key in rcskts) {
                         rcskt = rcskts[key];
                         rm = rcskt.data.room;
+                        gm = rcskt.data.game;
                         ctrlrcnt += rcskt.data.player.role == 'controller' ? 1 : 0;
                         if(ctrlrcnt >= cfg.maxController) throw 'max controller is reached';
                     }
+                    if(gm.stat != 'init') {
+                        throw 'game is already started';
+                    }
+
 
                     socket.data.room = rm;
                     if(ctrlrcnt == 0) socket.data.player.isHost = true;
@@ -244,7 +262,7 @@ io.sockets.on('connection', function (socket) {
                     socket.join(socket.data.room.id);
                     
 
-                    io.sockets.in(socket.data.room.id).emit('onPlayerJoined', {room:rm, player:socket.data.player});
+                    io.sockets.in(socket.data.room.id).emit('onPlayerJoined', {room:socket.data.room, player:socket.data.player, game:socket.data.game});
                 }else{
                     throw 'invalid playerActionJoin';
                 }
@@ -253,8 +271,7 @@ io.sockets.on('connection', function (socket) {
                 vs=getViewerSocket(); if(vs)vs.emit('onPlayerAction',data);
             }
         }catch(err){
-            //console.log(n, {action:data.action, e:err});
-            //socket.emit(n, {action:data.action, e:err});
+            console.log(n, data.action, err, data);
             socket.emit('error', {n:n, action:data.action, e:err})
         }
     });
@@ -265,10 +282,12 @@ io.sockets.on('connection', function (socket) {
         var rmid, rcid, rcids, rcskt, rcsktid;
         var rm;
         try{
-            if(data.action=='join'){
+            action=data.action;
+            if(action=='join'){
+                data=data._data;
+
                 if(data.player.role != 'viewer') throw 'data.player.role is not viewer';
                 if(roomPool.length==0) throw 'no room is available';
-
                 if(socket.data.room.id) {
                     for(key in socket.data.room.players) {
                         var player = socket.data.room.players[key];
@@ -284,19 +303,18 @@ io.sockets.on('connection', function (socket) {
                     socket.leave(socket.data.room.id);
                 }//*/
 
-
                 socket.data.player.role = 'viewer';
                 socket.data.player.name = 'viewer';
                 socket.data.room=clone(cfg.def_socketdata_room);
                 socket.data.room.id = roomPool.shift();
                 socket.data.room.players=[socket.data.player];
-                rm = socket.data.room;
                 socket.join(socket.data.room.id);
-                socket.emit('onPlayerJoined', {room:rm, player:socket.data.player});
+                socket.emit('onPlayerJoined', {room:socket.data.room, player:socket.data.player, game:socket.data.game});
             }else{
                 socket.broadcast.to(socket.data.room.id).emit('onViewerAction',data);
             }
         }catch(err){
+            console.log(n,err,data);
             //socket.emit(n, {action:data.action, e:err});
             socket.emit('err', {n:n, action:data.action, e:err})
         }
@@ -380,32 +398,36 @@ io.sockets.on('connection', function (socket) {
 
     socket.on('modifyGame', function (data){
         var n = 'modifyGame';
+        console.log(n,data);
         try {
             if(!data.game) throw 'invalid game';
-            if(socket.player.role != 'viewer' && !socket.player.isHost) throw 'player.role is not viewer and player is not Host';
+            if(socket.data.player.role != 'viewer' && !socket.data.player.isHost) throw 'player.role is not viewer and player is not Host';
 
-            if(socketdata.room.game.stat!='ended' && data.game.stat=='ended') {
-                socket.data.room.game.stat=data.game.stat;
-                data.game.endTime = socket.data.room.game.endTime = Date.now();
+            if(socket.data.game.stat!='ended' && data.game.stat=='ended') {
+                socket.data.game.stat=data.game.stat;
+                data.game.endTime = socket.data.game.endTime = Date.now();
                 io.sockets.in(socket.data.room.id).emit('onGameModified',data);
 
-            }else if(socketdata.room.game.stat!='ready' && data.game.stat == 'ready'){
-                socket.data.room.game.stat = data.game.stat;
-                data.game.endTime = socket.data.room.game.endTime = null;
-                data.game.startTime = socket.data.room.game.startTime = null;
+            }else if(socket.data.game.stat!='ready' && data.game.stat == 'ready'){
+                socket.data.game.stat = data.game.stat;
+                data.game.endTime = socket.data.game.endTime = null;
+                data.game.startTime = socket.data.game.startTime = null;
                 io.sockets.in(socket.data.room.id).emit('onGameModified',data);
 
                 setTimeout(function(){
-                    socket.data.room.game.stat = 'started';
-                    socket.data.room.game.startTime = Date.now();
+                    socket.data.game.stat = 'started';
+                    socket.data.game.startTime = Date.now();
 
-                    io.sockets.in(socket.data.room.id).emit('onGameModified', {game:{stat:'started', startTime:socket.data.room.game.startTime}});
+                    io.sockets.in(socket.data.room.id).emit('onGameModified', {game:{stat:'started', startTime:socket.data.game.startTime}});
                 }, cfg.confirmedGameStartWait);
             }else{
-                throw 'invalid game.stat:' + data.game.stat + ', current game.stat:' + socket.data.room.game.stat;
+                syncdata(socket.data.game,data.game);
+                //throw 'invalid game.stat:' + data.game.stat + ', current game.stat:' + socket.data.game.stat;
+                io.sockets.in(socket.data.room.id).emit('onGameModified',data);
             }
             
         } catch(err) {
+            console.log(n,err);
             //socket.emit(n, {e:err});
             socket.emit('error', {n:n, e:err}); 
         }
@@ -414,40 +436,31 @@ io.sockets.on('connection', function (socket) {
     socket.on('modifyPlayer', function (data){
         var n = 'modifyPlayer';
         try {
-            if(!data.player) throw 'invalid player';
-            if(socket.player.role != 'viewer' || !data.player.id) throw 'player.role is not viewer or data.player.id is empty';
-            if(socket.player.id != data.player.id) 'player.id is not same as data.player.id';
-            //syncplayer(data);
-            //io.sockets.in(socket.data.room.id).emit('onPlayerModified',data);
-            //socket.braodcast.to(socket.data.room.id).emit('onPlayerModified',data);
+            if(!data.player) throw 'invalid data.player';
+            if(socket.data.player.role == 'controller' ) {
+                data.player.id=socket.id;
 
-            if(socket.id==data.player.id) {
-                var toalldata = diffdata(socket.data.player, data.player, cfg.toall_playeronlyprops); 
-                if(!socket.data.player.confirm && data.player.confirm) {
-                    if(toalldata)toalldata.confirm = true;
-                    else toalldata={confirm:true};
-                }
-                if(toalldata) {
-                    toalldata.id = socket.id;
-                    syncplayer(toalldata);
-                    socket.broadcast.to(socket.data.room.id).emit('onPlayerModified', {player:toalldata});
-                }
+                var toviewerdata = diffdata(socket.data.player,data.player,cfg.tovieweronlyprops,'include');
+                var toalldata = diffdata(socket.data.player,data.player,cfg.tovieweronlyprops,'exclude');
+                syncplayer(data.player);
+
                 vs=getViewerSocket();
-                if(vs){
-                    var toviewerdata = diffdata(socket.data.player, data.player, cfg.toviewer_playeronlyprops);
-                    if(toviewerdata){
-                        toviewerdata.id = socket.id;
-                        syncplayer(toviewerdata);
-                        vs.emit('onPlayerModified', {player:toviewerdata});
-                    }
+                if(vs && toviewerdata){
+                    toviewerdata.id=socket.id;
+                    vs.emit('onPlayerModified',{player:toviewerdata});
                 }
-            }else if(socket.player.role=='viewer'){
-                syncplayer(data);
-                socket.broadcast.to(socket.data.room.id).emit('onPlayerModified', {player:toviewerdata});
+                if(toalldata){
+                    toalldata.id=socket.id;
+                    socket.broadcast.to(socket.data.room.id).emit('onPlayerModified',{player:toalldata});
+                }
+            }else if(socket.data.player.role=='viewer'){
+                if(!data.player.id)data.player.id=socket.id;
+                syncplayer(data.player);
+                socket.broadcast.to(socket.data.room.id).emit('onPlayerModified', {player:data.player});
             }
 
 
-            if(socket.data.room.game.stat == 'init') {
+            if(socket.data.game.stat == 'init') {
                 var confirmcnt=0;
                 var cntrlrcnt=0;
 
@@ -457,13 +470,12 @@ io.sockets.on('connection', function (socket) {
                     confirmcnt+=player.confirmed?1:0;
                 }
                 if(cntrlrcnt==confirmcnt){
-                    socket.data.room.game.stat='confirmed';
-                    io.sockets.sockets.in(socket.data.room.id).emit('onGameModified',{stat:socket.data.room.game.stat});
+                    socket.data.game.stat='confirmed';
+                    io.sockets.in(socket.data.room.id).emit('onGameModified',{game:{stat:socket.data.game.stat}});
                 }
             }
-
-
         } catch(err) {
+            console.log(n,err,data);
             //socket.emit(n, {e:err});
             socket.emit('error', {n:n, e:err}); 
         }
